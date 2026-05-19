@@ -1,7 +1,7 @@
 blueprint:
   name: Return the Lights
   description: This ritual is used to bring back the lights that most recently joined the dark side. The lights are returned to their original state. Neither darker or brighter.
-  source_url: https://github.com/etokheim/home-assistant-blueprints/blob/master/script/return_the_lights.yaml
+  source_url: https://github.com/etokheim/home-assistant-scripts/blob/master/return_the_lights.yaml
   domain: script
 
   input:    

@@ -18,7 +18,7 @@ blueprint:
     - Add scene cycling to remotes!
     - In combination with Scene exploration (If not, use the non-scene-extrapolation version of this blueprint)
 
-  source_url: https://github.com/etokheim/home-assistant-blueprints/blob/master/script/cycle_scenes_in_area.yaml
+  source_url: https://github.com/etokheim/home-assistant-scripts/blob/master/cycle_scenes_in_area.yaml
   domain: script
 
   input:
