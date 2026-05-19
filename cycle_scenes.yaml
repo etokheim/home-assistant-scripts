@@ -31,7 +31,7 @@ blueprint:
           multiple: true
     
     default_scene:
-      name: Default Scenee
+      name: Default Scene
       description: The scene that is turned on if the lights has been off for longer than the specified time. **If this was the last activated scene before turning off the lights, they will be powered on to this scene - regardless of the `Power on to last used scene` setting.**
       selector:
         entity:
@@ -91,6 +91,7 @@ variables:
   default_scene_after: !input 'default_scene_after'
   use_static_order: !input use_static_order
   power_on_to_last_used_scene: !input power_on_to_last_used_scene
+  power_on_to_default_scene_if_last_activated: !input power_on_to_default_scene_if_last_activated
 
 sequence:
   - variables:
@@ -128,8 +129,9 @@ sequence:
     then:
       - alias: Cycle to the next scene (turns on the next scene in the order)
         service: scene.turn_on
-        data_template:
+        data:
           transition: !input transition
+        target:
           entity_id: >            
             {% if use_static_order == true %}
 
@@ -171,6 +173,7 @@ sequence:
                     | selectattr("state", "eq", "off")
                     | selectattr('entity_id', 'in', area_entities(area_id))
                     | list
+                  last_turned_off = Undefined
                 )
               -%}
 
@@ -193,8 +196,9 @@ sequence:
         then:
         - alias: Then activate the default scene
           service: scene.turn_on
-          data_template:
+          data:
             transition: !input transition
+          target:
             entity_id: !input default_scene
 
         else:
@@ -203,8 +207,9 @@ sequence:
             conditions: '{{ power_on_to_last_used_scene == true }}'
             sequence:
             - service: scene.turn_on
-              data_template:
+              data:
                 transition: !input transition
+              target:
                 entity_id: "{{ last_activated_scene }}"
           
           - alias: Else, we turn the lights on as they were before they were turned off
@@ -218,8 +223,9 @@ sequence:
               then:
               - alias: Then activate the default scene
                 service: scene.turn_on
-                data_template:
+                data:
                   transition: !input transition
+                target:
                   entity_id: !input default_scene
 
               else:
