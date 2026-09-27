@@ -9,7 +9,7 @@ Automation blueprints live in [home-assistant-automations](https://github.com/et
 
 ## Cycle Scenes in Area
 
-Hue-style scene cycling for an entire area: tap once to walk through scenes, with smart “lights were off for a while” handling and first-class support for [Scene Extrapolation](https://github.com/etokheim/scene-extrapolation).
+Hue-style scene cycling for an entire area: tap once to walk through scenes, with smart “lights were off for a while” handling. The default scene is the one in the area labeled **Default Scene** — label a [Scene Studio](https://github.com/etokheim/scene_studio) circadian scene.
 
 [![Add to Home Assistant](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fetokheim%2Fhome-assistant-scripts%2Fblob%2Fmaster%2Fcycle_scenes_in_area.yaml)
 
@@ -17,7 +17,7 @@ Hue-style scene cycling for an entire area: tap once to walk through scenes, wit
 
 ## Cycle Scenes
 
-Same cycling idea, but you pick the scenes explicitly — handy when you are not using Scene Extrapolation or want a fixed playlist.
+Same cycling idea, but you pick the scenes explicitly — handy when you want a fixed playlist instead of every scene in the area.
 
 [![Add to Home Assistant](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fetokheim%2Fhome-assistant-scripts%2Fblob%2Fmaster%2Fcycle_scenes.yaml)
 

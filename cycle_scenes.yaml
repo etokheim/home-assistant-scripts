@@ -76,7 +76,7 @@ blueprint:
       
     power_on_to_default_scene_if_last_activated:
       name: "Power on to the default scene, if that was the last activated?"
-      description: "This is a special setting meant to be used in combination with my custom integration: `Scene Extrapolation`. It's kind of the same as `Power on to last used scene`, but only if the `Default scene` was the last activated scene. In practise, this means that any 'overrides' to the `Default scene` will not be restored when turning the lights on again."
+      description: "Meant to be used with Scene Studio. Same idea as `Power on to last used scene`, but only if the Default Scene was the last activated scene. Overrides on that scene are not restored when the lights come back on."
       default: true
       selector:
         boolean:
