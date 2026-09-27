@@ -10,6 +10,7 @@ blueprint:
     - The default scene is used if the lights have been off for longer than the specified time.
     - It is the scene in the area with the Home Assistant label **Default Scene** (label id `default_scene`).
     - Exactly one labeled scene is used. If none or more than one match, no default is chosen.
+    - If `input_text.{area_id}_midlertidig_scene` holds `name|area,area` and those areas are not all dark for **Use default scene after**, that named scene is used instead. The area list is not a light group (`area_entities` at check time). A missing helper changes nothing.
 
     ### 🎯 **Use cases:**
     - Add scene cycling to remotes!
@@ -199,6 +200,79 @@ sequence:
             {% endif %}
 
     else:
+      # Temporary scene from sett_felles_scene: "<friendly name>|<area_id>,..."
+      # Same name match as that script (area prefix stripped, case-insensitive).
+      # Expiry watches area_entities lights in the stored areas, not an HA group.
+      - variables:
+          override_info: >
+            {% set raw = states('input_text.' ~ area_id ~ '_midlertidig_scene') %}
+            {% if raw in ['unknown', 'unavailable', 'none', ''] or '|' not in raw %}
+            {% else %}
+              {% set scene_key = raw.split('|')[0] | trim | lower %}
+              {% set group_areas = raw.split('|')[1].split(',') | map('trim') | reject('eq', '') | list %}
+              {% set ns = namespace(any_on=false, latest=0, count=0) %}
+              {% for gid in group_areas %}
+                {% for light in states.light | selectattr('entity_id', 'in', area_entities(gid)) | list %}
+                  {% if 'entity_id' not in light.attributes %}
+                    {% set ns.count = ns.count + 1 %}
+                    {% if light.state == 'on' %}
+                      {% set ns.any_on = true %}
+                    {% else %}
+                      {% set ts = as_timestamp(light.last_changed) | float(0) %}
+                      {% if ts > ns.latest %}{% set ns.latest = ts %}{% endif %}
+                    {% endif %}
+                  {% endif %}
+                {% endfor %}
+              {% endfor %}
+              {% set age = as_timestamp(now()) - ns.latest %}
+              {% set expired = (not ns.any_on) and ns.count > 0 and ns.latest > 0 and (age >= (default_scene_after | float(0) * 60)) %}
+              {% set an = area_name(area_id) %}
+              {% set alow = an | lower %}
+              {% set found = namespace(items=[]) %}
+              {% for scene in states.scene | selectattr('entity_id', 'in', area_entities(area_id)) | map(attribute='entity_id') | list %}
+                {% set sraw = state_attr(scene, 'friendly_name') | default('') | trim %}
+                {% set low = sraw | lower %}
+                {% if low == alow %}
+                  {% set stripped = sraw %}
+                {% elif low.startswith(alow ~ ' ') or low.startswith(alow ~ '-') or low.startswith(alow ~ ':') or low.startswith(alow ~ '–') %}
+                  {% set stripped = sraw[an|length:] | regex_replace('^[\s\-–:]+', '') | trim %}
+                {% else %}
+                  {% set stripped = sraw %}
+                {% endif %}
+                {% if stripped | lower == scene_key %}
+                  {% set found.items = found.items + [scene] %}
+                {% endif %}
+              {% endfor %}
+              {% set matched = found.items[0] if found.items | length == 1 else '' %}
+              {{ matched }}|{{ 'yes' if expired else 'no' }}
+            {% endif %}
+      - if:
+          - alias: Temporary scene still applies
+            condition: template
+            value_template: >
+              {{
+                '|' in override_info
+                and (override_info.split('|')[0] | length > 0)
+                and (override_info.split('|')[1] != 'yes')
+              }}
+        then:
+          - alias: Turn on the remembered scene
+            action: scene.turn_on
+            data:
+              transition: !input transition
+            target:
+              entity_id: "{{ override_info.split('|')[0] }}"
+          - stop: Temporary scene applied
+      - if:
+          - alias: Whole stored area set has been dark long enough
+            condition: template
+            value_template: "{{ '|' in override_info and override_info.endswith('|yes') }}"
+        then:
+          - action: input_text.set_value
+            target:
+              entity_id: "{{ 'input_text.' ~ area_id ~ '_midlertidig_scene' }}"
+            data:
+              value: ""
       - variables:
           turned_off_light_ids: >
             {#- First we'll find the area's turned off lights -#}
