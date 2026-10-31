@@ -9,7 +9,7 @@ Automation blueprints live in [home-assistant-automations](https://github.com/et
 
 ## Cycle Scenes in Area
 
-Hue-style scene cycling for an entire area: tap once to walk through scenes, with smart “lights were off for a while” handling. The default scene is the one in the area labeled **Default Scene** — label a [Scene Studio](https://github.com/etokheim/scene_studio) circadian scene.
+Hue-style scene cycling for an entire area: tap once to walk through scenes, with smart “lights were off for a while” handling. The default is the oldest available [Scene Studio](https://github.com/etokheim/scene_studio) scene in the area (entity-registry registration order, not activation time). If none exists, the oldest available scene from another integration is used. No labels are needed. Unknown activation times never outrank real timestamps; unavailable scenes are skipped.
 
 [![Add to Home Assistant](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fetokheim%2Fhome-assistant-scripts%2Fblob%2Fmaster%2Fcycle_scenes_in_area.yaml)
 

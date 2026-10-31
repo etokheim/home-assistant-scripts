@@ -8,13 +8,13 @@ blueprint:
 
     ### 🚀 **Default Scene**
     - The default scene is used if the lights have been off for longer than the specified time.
-    - It is the scene in the area with the Home Assistant label **Default Scene** (label id `default_scene`).
-    - Exactly one labeled scene is used. If none or more than one match, no default is chosen.
+    - Use the oldest available Scene Studio scene in the area (entity-registry registration order, not last activation).
+    - Fall back to the oldest available scene from another integration; no labels are required.
     - If `input_text.{area_id}_midlertidig_scene` holds `name|area,area` and those areas are not all dark for **Use default scene after**, that named scene is used instead. The area list is not a light group (`area_entities` at check time). A missing helper changes nothing.
 
     ### 🎯 **Use cases:**
     - Add scene cycling to remotes!
-    - With Scene Studio, label the area's circadian scene **Default Scene**.
+    - With Scene Studio, the area's oldest available scene is selected automatically.
 
   source_url: https://github.com/etokheim/home-assistant-scripts/blob/master/cycle_scenes_in_area.yaml
   domain: script
@@ -71,7 +71,7 @@ blueprint:
 
         power_on_to_default_scene_if_last_activated:
           name: "Power on to the default scene, if that was the last activated?"
-          description: "Meant to be used with Scene Studio. Same idea as `Power on to last used scene`, but only if the labeled Default Scene was the last activated scene. Overrides on that scene are not restored when the lights come back on."
+          description: "Meant to be used with Scene Studio. Same idea as `Power on to last used scene`, but only if the automatically selected default was the last activated scene. Overrides on that scene are not restored when the lights come back on."
           default: true
           selector:
             boolean:
@@ -99,50 +99,61 @@ sequence:
       # to reference other variables created in the same section in the variable definition section above. In an variable
       # action slot, as we have here, that works fine however. (Example. "var1: 1, var2: var1 + 1")
 
-      # Exactly one area scene labeled Default Scene (label id default_scene).
-      # None or several: empty, so we do not guess.
-      default_scene: >
-        {% set labeled = label_entities('default_scene')
-          | select('in', area_entities(area_id))
-          | list %}
-        {{ labeled[0] if labeled | length == 1 else '' }}
+      default_scene: >-
+        {# Registry order is oldest registration first, independent of activations. #}
+        {% set available = states.scene | rejectattr('state', 'eq', 'unavailable') | map(attribute='entity_id') | list %}
+        {% set candidates = area_entities(area_id) | select('in', available) | list %}
+        {% set ns = namespace(titles=[], studio=[]) %}
+        {% for scene in candidates %}
+          {% set entry = config_entry_id(scene) %}
+          {% if entry and config_entry_attr(entry, 'domain') == 'scene_studio' %}
+            {% set title = config_entry_attr(entry, 'title') %}
+            {% if title not in ns.titles %}{% set ns.titles = ns.titles + [title] %}{% endif %}
+          {% endif %}
+        {% endfor %}
+        {% for title in ns.titles %}
+          {% set ns.studio = ns.studio + (integration_entities(title) | select('in', candidates) | list) %}
+        {% endfor %}
+        {{ ns.studio[0] if ns.studio else (candidates[0] if candidates else '') }}
 
       area_scenes: >
         {{ states.scene
           | selectattr('entity_id', 'in', area_entities(area_id))
+          | rejectattr('state', 'eq', 'unavailable')
           | map(attribute='entity_id')
           | list
         }}
 
       scenes_to_handle: "{{ (area_scenes | reject('in', excluded_scenes) | list) }}"
 
-      scenes_sorted_by_activation_time: >
-        {% if scenes_to_handle | length > 0 %}
-          {{ expand(scenes_to_handle) | sort(attribute='state', reverse = true) | map(attribute='entity_id') | list }}
-        {% else %}
-          []
-        {% endif %}
+      scenes_sorted_by_activation_time: >-
+        {% set ns = namespace(scenes=[]) %}
+        {% for scene in expand(scenes_to_handle) | rejectattr('state', 'eq', 'unavailable') %}
+          {% set timestamp = as_timestamp(scene.state, 0) %}
+          {% if timestamp > 0 %}{% set ns.scenes = ns.scenes + [{'id': scene.entity_id, 'timestamp': timestamp}] %}{% endif %}
+        {% endfor %}
+        {{ ns.scenes | sort(attribute='timestamp', reverse=true) | map(attribute='id') | list }}
 
-      # Version of `scenes_sorted_by_activation_time` with a forcefully included `default_scene`
-      scenes_with_default_scene_sorted_by_activation_time: >
-        {% set with_default = scenes_to_handle + ([ default_scene ] if default_scene else []) %}
-        {% if with_default | length > 0 %}
-          {{ expand(with_default) | sort(attribute='state', reverse = true) | map(attribute='entity_id') | list }}
-        {% else %}
-          []
-        {% endif %}
+      scenes_with_default_scene_sorted_by_activation_time: >-
+        {% set with_default = scenes_to_handle + ([default_scene] if default_scene else []) %}
+        {% set ns = namespace(scenes=[]) %}
+        {% for scene in expand(with_default) | rejectattr('state', 'eq', 'unavailable') %}
+          {% set timestamp = as_timestamp(scene.state, 0) %}
+          {% if timestamp > 0 %}{% set ns.scenes = ns.scenes + [{'id': scene.entity_id, 'timestamp': timestamp}] %}{% endif %}
+        {% endfor %}
+        {{ ns.scenes | sort(attribute='timestamp', reverse=true) | map(attribute='id') | list }}
 
       last_activated_scene: >
         {% if scenes_sorted_by_activation_time | length > 0 %}
           {{ scenes_sorted_by_activation_time[0] }}
         {% else %}
-          {{ default_scene }}
+          {{ '' }}
         {% endif %}
       index_of_last_activated_scene: >
         {% if scenes_to_handle | length > 0 and last_activated_scene in scenes_to_handle %}
           {{ scenes_to_handle.index(last_activated_scene) }}
         {% else %}
-          0
+          -1
         {% endif %}
       last_activated_scene_with_default_scene: >
         {% if scenes_with_default_scene_sorted_by_activation_time | length > 0 %}
@@ -161,6 +172,17 @@ sequence:
             | list
         -%}
         {{ lights | length != 0 }}
+
+  - if:
+      - condition: template
+        value_template: "{{ area_scenes | length == 0 }}"
+    then:
+      - action: light.turn_on
+        target:
+          area_id: "{{ area_id }}"
+        data:
+          transition: !input transition
+      - stop: No available scenes; turned on the area's lights
 
   - if:
       - condition: template
@@ -186,7 +208,7 @@ sequence:
                 {% if unknown_scenes | count > 0 %}
                   {{ unknown_scenes[0] }}
                 {% else %}
-                  {% set known_scenes = expand(scenes_to_handle) | sort(attribute='state', reverse = false) | map(attribute='entity_id') | list %}
+                  {% set known_scenes = scenes_sorted_by_activation_time | reverse | list %}
                   {% if known_scenes | length > 0 %}
                     {{ known_scenes[0] }}
                   {% else %}
@@ -333,7 +355,7 @@ sequence:
 
               - condition: template
                 value_template: >
-                  {{ seconds_since_the_last_light_turned_off | int >= default_scene_after * 60 }}
+                  {{ seconds_since_the_last_light_turned_off | int(0) >= default_scene_after * 60 }}
 
               - condition: template
                 value_template: "{{ default_scene | length > 0 }}"
@@ -349,7 +371,7 @@ sequence:
         else:
           - choose:
               - alias: Else, if the power_on_to_last_used_scene is true, activate the last used scene
-                conditions: "{{ power_on_to_last_used_scene == true }}"
+                conditions: "{{ power_on_to_last_used_scene | bool(false) and last_activated_scene | length > 0 }}"
                 sequence:
                   - service: scene.turn_on
                     data:
